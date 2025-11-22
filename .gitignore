@@ -1,0 +1,29 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*.so
+
+# Virtual environments
+.venv/
+env/
+venv/
+.env/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# IDE configs
+.vscode/
+.idea/
+
+# macOS
+.DS_Store
+
+# Build directories
+build/
+dist/
+bazel-*/
+
+# Logs, temp files
+*.log
+*.tmp
