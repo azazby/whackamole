@@ -2,7 +2,8 @@ from pathlib import Path
 from pydrake.all import (
     DiagramBuilder,
     Simulator,
-    StartMeshcat
+    StartMeshcat,
+    AddFrameTriadIllustration
 )
 from manipulation.station import (
     LoadScenario,
@@ -58,7 +59,45 @@ scenario = LoadScenario(data=scenario_yaml)
 station = MakeHardwareStation(scenario, meshcat=meshcat)
 builder = DiagramBuilder()
 builder.AddSystem(station)
+plant = station.GetSubsystemByName("plant")
 
+# Create temporary context
+temp_context = station.CreateDefaultContext()
+temp_plant_context = plant.GetMyContextFromRoot(temp_context)
+
+# Get initial pose of the iiwa end effector
+X_WGinitial = plant.EvalBodyPoseInWorld(temp_plant_context, plant.GetBodyByName("iiwa_link_7"))
+print("X_WGinitial:", X_WGinitial)
+
+# Get pose of hammer face frame in world
+hammer = plant.GetModelInstanceByName("hammer")
+hammer_face_frame = plant.GetFrameByName("hammer_face", hammer)
+X_WHammer = hammer_face_frame.CalcPoseInWorld(temp_plant_context)
+print("X_WHammer pose:", X_WHammer)
+
+# Get soup pose in world
+soup = plant.GetModelInstanceByName("soup")
+soup_body = plant.GetBodyByName("base_link_soup", soup)
+X_WSoup = plant.EvalBodyPoseInWorld(temp_plant_context, soup_body)
+print("X_WSoup:", X_WSoup)
+
+# Visualize axes of frames (useful for debugging)
+scenegraph = station.GetSubsystemByName("scene_graph")
+AddFrameTriadIllustration(
+    scene_graph=scenegraph,
+    body=plant.GetBodyByName("base_link_soup"),
+    length=0.1,
+)
+AddFrameTriadIllustration(
+    scene_graph=scenegraph,
+    frame=hammer_face_frame,
+    length=0.1,
+)
+AddFrameTriadIllustration(
+    scene_graph=scenegraph, body=plant.GetBodyByName("iiwa_link_7"), length=0.1
+)
+
+# Build digram
 diagram = builder.Build()
 
 # Create a context for the diagram
@@ -74,9 +113,6 @@ iiwa_q0 = plant.GetPositions(plant_context, iiwa)
 # Fix the station input port "iiwa.position" to q0
 station_context = station.GetMyMutableContextFromRoot(root_context)
 station.GetInputPort("iiwa.position").FixValue(station_context, iiwa_q0)
-
-hammer = plant.GetModelInstanceByName("iiwa")
-soup = plant.GetModelInstanceByName("soup")
 
 # Simulate
 simulator = Simulator(diagram, root_context)

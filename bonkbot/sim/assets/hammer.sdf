@@ -69,5 +69,14 @@
       </collision>
 
     </link>
+
+    <!-- frame for hammer head (center of head) -->
+    <frame name="hammer_head" attached_to="hammer_link">
+        <pose>0 0 0.3 0 1.5708 0</pose>
+    </frame>
+    <frame name="hammer_face" attached_to="hammer_link">
+        <pose>0.075 0 0.3 0 1.5708 0</pose>
+    </frame>
+    
   </model>
 </sdf>
