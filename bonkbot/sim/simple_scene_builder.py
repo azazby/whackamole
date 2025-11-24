@@ -15,7 +15,7 @@ HAMMER_SDF_PATH = Path(__file__).parent / "assets" / "hammer.sdf"
 scenario_yaml = f"""directives:
 - add_model:
     name: iiwa
-    file: package://drake_models/iiwa_description/urdf/iiwa14_primitive_collision.urdf
+    file: package://drake_models/iiwa_description/sdf/iiwa7_with_box_collision.sdf
     default_joint_positions:
       iiwa_joint_1: [-1.57]
       iiwa_joint_2: [0.1]
