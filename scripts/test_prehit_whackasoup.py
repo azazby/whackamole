@@ -1,38 +1,18 @@
 # scripts/test_prehit_whackasoup.py
 from bonkbot.sim.soup_scene_builder import add_soup_scene
 from bonkbot.planning.prehit_planner import plan_prehit
-from bonkbot.messages import JointTrajectory, PrehitPlan
+from bonkbot.strategy.scripted_strategy import (make_scripted_strategy,
+                                                compile_strategy_sequence_to_segments,
+                                                concatenate_joint_trajectories)
 
-import numpy as np
 from pydrake.all import (
     DiagramBuilder,
     Simulator,
-    RigidTransform,
-    RotationMatrix,
     StartMeshcat,
     ConstantVectorSource,
-    BasicVector,
     TrajectorySource
-
 )
 from manipulation.meshcat_utils import AddMeshcatTriad
-
-
-def get_prehit_pose(X_WO: RigidTransform, 
-                    X_HL7: RigidTransform) -> tuple[RigidTransform, RigidTransform]:
-    """
-    Given the object pose X_WO, compute a prehit pose in hammer face frame and iiwa link 7 frame.
-    
-    Parameters:
-        X_WO: pose of target object in world frame
-        X_HL7: pose of iiwa link 7 in hammer face frame
-    """
-    p_OH = np.array([0.0, -0.2, 0.0])
-    R_OH = RotationMatrix.MakeYRotation(-np.pi/2) @ RotationMatrix.MakeXRotation(-np.pi/2)
-    X_OH = RigidTransform(R_OH, p_OH) # pose of hammer face from object frame
-    X_WH_prehit = X_WO @ X_OH # prehit pose of hammer face 
-    X_WL7_prehit = X_WH_prehit @ X_HL7
-    return X_WH_prehit, X_WL7_prehit
 
 
 def main():
@@ -50,15 +30,10 @@ def main():
 
     # Get initial positions of the iiwa joints
     iiwa_q0 = plant.GetPositions(plant_context, iiwa_model)
+    q_rest = iiwa_q0.copy()  # rest position to return to after each hit
     # default set iiwa joint input to initial position for now
     # iiwa_src = builder.AddSystem(ConstantVectorSource(iiwa_q0))
     # builder.Connect(iiwa_src.get_output_port(), station.GetInputPort("iiwa.position"))
-
-    # Choose which soup to hit (hardcode for now)
-    SOUP_ID = 2
-    soup_model = soup_models[SOUP_ID]
-    soup_body = plant.GetBodyByName("base_link_soup", soup_model)
-    X_WSoup = plant.EvalBodyPoseInWorld(plant_context, soup_body)
 
     # Get hammer head frame
     hammer = plant.GetModelInstanceByName("hammer")
@@ -68,27 +43,27 @@ def main():
     l7_frame = plant.GetFrameByName("iiwa_link_7", iiwa_model)
     X_HL7 = plant.CalcRelativeTransform(plant_context, hammer_face_frame, l7_frame)
     
-    # Get pre-hit pose frame
-    X_WH_prehit, X_WL7_prehit = get_prehit_pose(X_WSoup, X_HL7)
-    # Visualize target prehit frames
-    AddMeshcatTriad(
-        meshcat,
-        path="hammer_prehit_pose_triad",  
-        length=0.1,
-        radius=0.005,
-        X_PT=X_WH_prehit,                 
+    # Create scripted StrategyOutput sequence for all soups
+    strategy_msgs = make_scripted_strategy(
+        plant=plant,
+        station_context=context,
+        iiwa_model=iiwa_model,
+        soup_models=soup_models,
+        hammer_face_frame=hammer_face_frame,
     )
 
-    # Create prehit plan
-    prehit_plan = plan_prehit(plant, iiwa_q0, SOUP_ID, X_WH_prehit)
-    if prehit_plan is None:
-        print("Planning failed!")
-        return
-    joint_traj = prehit_plan.traj # JointTrajectory object
-    q_traj = joint_traj.q_traj  # PiecewisePolynomial object
+    # Convert StrategyOutputs -> list of JointTrajectory segments
+    segments = compile_strategy_sequence_to_segments(
+        plant=plant,
+        strategy_msgs=strategy_msgs,
+        q_rest=q_rest,
+    )
+
+    # Concatenate segments into a single trajectory
+    q_traj_global = concatenate_joint_trajectories(segments)
 
     # Set up trajectory source to provide the joint trajectory
-    iiwa_src = builder.AddSystem(TrajectorySource(q_traj))
+    iiwa_src = builder.AddSystem(TrajectorySource(q_traj_global))
     builder.Connect(iiwa_src.get_output_port(), station.GetInputPort("iiwa.position"))
 
     # Build the diagram 
@@ -99,16 +74,14 @@ def main():
     # Run simulation
     simulator.set_target_realtime_rate(1.0)
     # simulator.AdvanceTo(5.0)  # run for 5 seconds (or longer)
-    # input("Press Enter to exit...")  # keep Meshcat alive so you can look around
 
     # Record simulation
     meshcat.StartRecording()
-    simulator.AdvanceTo(q_traj.end_time())
+    simulator.AdvanceTo(q_traj_global.end_time())
     meshcat.StopRecording()
     meshcat.PublishRecording()
 
     input("Press Enter to exit...")  # keep Meshcat alive so you can look around
-
 
 
 if __name__ == "__main__":
