@@ -51,7 +51,7 @@ class StrategyOutput:
     timestamp: Time
     mode: StrategyMode
     target_mole_id: Optional[int] = None
-    target_prehit_pose_W: Optional[object]                  # desired hammer/EE pose just above the mole before hitting
+    target_prehit_pose_W: Optional[object] = None                  # desired hammer/EE pose just above the mole before hitting
     hit_direction_W: Optional[Vector3] = None               # vector in world frame indicating desired hit direction
     post_hit_behavior: PostHitBehavior = "return_to_ready"  # what to do after hit completes
     hit_deadline: Optional[Time] = None                     # optional deadline by which we would like the hit to happen (world time)
