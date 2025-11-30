@@ -17,7 +17,6 @@ from pydrake.trajectories import PiecewisePolynomial     # used by trajectory he
 
 
 # --- Contact force extraction system --------------------------------------
-
 class HammerContactForce(LeafSystem):
     """
     Reads ContactResults from the plant and outputs the scalar contact force
@@ -43,6 +42,25 @@ class HammerContactForce(LeafSystem):
             BasicVector(1),
             self.CalcOutput,
         )
+    def configure_new_hit(
+        self,
+        t_hit_start,
+        q_prehit,
+        J_pinv,
+        n_hat,
+        F_des,
+        hit_duration,
+        retract_duration,
+        traj_approach,
+    ):
+        self._t_hit_start = float(t_hit_start)
+        self._hit_duration = float(hit_duration)
+        self._retract_duration = float(retract_duration)
+        self._q_prehit = q_prehit.copy().reshape(-1)
+        self._J_pinv = J_pinv.copy()
+        self._n_hat = n_hat / np.linalg.norm(n_hat)
+        self._F_des_hit = float(F_des)
+        self._traj = traj_approach
 
     def CalcOutput(self, context, output):
         # Read ContactResults from the input port
@@ -581,3 +599,121 @@ def run_hit_experiment(
     plot_hit_results(hit_handles, plot=plot)
 
     return diagram, simulator, hit_handles
+
+
+def configure_hit_for_target(
+    hit_ctrl,
+    plant,
+    iiwa_model_instance,
+    hammer_face_frame,
+    X_WSoup,
+    X_WH_prehit,
+    q_current,
+    q_prehit,
+    params: AdmittanceParams,
+    t_now: float,
+):
+    # Approach traj
+    path = [q_current, q_prehit]
+    traj = make_joint_space_position_trajectory(path, timestep=params.approach_timestep)
+    t_hit_start = t_now + traj.end_time()
+
+    # Direction & Jacobian
+    n_hat = compute_n_hat(X_WSoup, X_WH_prehit)
+    J_pinv = compute_J_pinv_at_prehit(plant, iiwa_model_instance, hammer_face_frame, q_prehit)
+
+    # Configure controller internals
+    hit_ctrl.configure_new_hit(
+        t_hit_start=t_hit_start,
+        q_prehit=q_prehit,
+        J_pinv=J_pinv,
+        n_hat=n_hat,
+        F_des=params.F_des,
+        hit_duration=params.hit_duration,
+        retract_duration=params.retract_duration,
+        traj_approach=traj,
+    )
+
+    return traj, t_hit_start, n_hat, J_pinv
+
+
+def build_hit_admittance_core(
+    builder, station, plant, iiwa_model_instance, hammer_body_index, hammer_face_frame, params: AdmittanceParams
+):
+    # Use q_current = zeros or plant defaults for dummy setup
+    temp_ctx = station.CreateDefaultContext()
+    plant_ctx = plant.GetMyContextFromRoot(temp_ctx)
+    q_current = plant.GetPositions(plant_ctx, iiwa_model_instance)
+
+    # Dummy initial prehit (same as current)
+    q_prehit = q_current.copy()
+    X_WSoup_dummy = plant.EvalBodyPoseInWorld(plant_ctx, plant.world_body()).Clone()
+    X_WH_prehit_dummy = X_WSoup_dummy  # dummy; will be overwritten
+
+    handles = build_hit_admittance_pipeline(
+        builder=builder,
+        station=station,
+        plant=plant,
+        iiwa_model_instance=iiwa_model_instance,
+        hammer_body_index=hammer_body_index,
+        hammer_face_frame=hammer_face_frame,
+        q_current=q_current,
+        X_WSoup=X_WSoup_dummy,
+        X_WH_prehit=X_WH_prehit_dummy,
+        q_prehit=q_prehit,
+        params=params,
+    )
+
+    return handles
+
+
+def reset_admittance_state_for_new_hit(hit_ctrl, root_context, v_pre: float):
+    hit_ctx = hit_ctrl.GetMyMutableContextFromRoot(root_context)
+    x_hit = hit_ctx.get_mutable_continuous_state_vector()
+    x_hit[0] = 0.0        # s = 0
+    x_hit[1] = v_pre      # s_dot = v_pre
+
+
+def initialize_whack_system(scenario_yaml, params: AdmittanceParams):
+    scenario = LoadScenario(data=scenario_yaml)
+    station = MakeHardwareStation(scenario, meshcat=None)
+    builder = DiagramBuilder()
+    builder.AddSystem(station)
+    plant = station.GetSubsystemByName("plant")
+
+    # Get iiwa + hammer
+    iiwa = plant.GetModelInstanceByName("iiwa")
+    hammer = plant.GetModelInstanceByName("hammer")
+    hammer_body = plant.GetBodyByName("hammer_link", hammer)
+    hammer_body_index = hammer_body.index()
+    hammer_face_frame = plant.GetFrameByName("hammer_face", hammer)
+
+    # Build and wire the admittance controller (with dummy initial config)
+    from whack_force_admittance import build_hit_admittance_core
+    hit_handles = build_hit_admittance_core(
+        builder=builder,
+        station=station,
+        plant=plant,
+        iiwa_model_instance=iiwa,
+        hammer_body_index=hammer_body_index,
+        hammer_face_frame=hammer_face_frame,
+        params=params,
+    )
+
+    diagram = builder.Build()
+    simulator = Simulator(diagram)
+    root_context = simulator.get_mutable_context()
+
+    return {
+        "diagram": diagram,
+        "simulator": simulator,
+        "station": station,
+        "plant": plant,
+        "iiwa": iiwa,
+        "hammer_face_frame": hammer_face_frame,
+        "hammer_body_index": hammer_body_index,
+        "hit_handles": hit_handles,
+        "params": params,
+    }
+
+
