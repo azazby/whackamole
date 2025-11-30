@@ -4,13 +4,14 @@ import numpy as np
 import matplotlib.pyplot as plt
 from dataclasses import dataclass
 
-from pydrake.systems.framework import LeafSystem, BasicVector
+from pydrake.systems.framework import LeafSystem, BasicVector, DiagramBuilder
 from pydrake.common.value import AbstractValue
 from pydrake.multibody.plant import ContactResults
 from pydrake.multibody.tree import JacobianWrtVariable  # used later for J_pinv
 from pydrake.systems.primitives import LogVectorOutput  # used later for logging
 from pydrake.trajectories import PiecewisePolynomial     # used by trajectory helper
- from pydrake.systems.analysis import Simulator
+from pydrake.systems.analysis import Simulator
+from manipulation.scenarios import LoadScenario, MakeHardwareStation
 
 
 
@@ -42,25 +43,11 @@ class HammerContactForce(LeafSystem):
             BasicVector(1),
             self.CalcOutput,
         )
-    def configure_new_hit(
-        self,
-        t_hit_start,
-        q_prehit,
-        J_pinv,
-        n_hat,
-        F_des,
-        hit_duration,
-        retract_duration,
-        traj_approach,
-    ):
-        self._t_hit_start = float(t_hit_start)
-        self._hit_duration = float(hit_duration)
-        self._retract_duration = float(retract_duration)
-        self._q_prehit = q_prehit.copy().reshape(-1)
-        self._J_pinv = J_pinv.copy()
+    
+    def set_direction(self, n_hat):
+        """Update the projection direction n_hat (unit vector in world)."""
         self._n_hat = n_hat / np.linalg.norm(n_hat)
-        self._F_des_hit = float(F_des)
-        self._traj = traj_approach
+
 
     def CalcOutput(self, context, output):
         # Read ContactResults from the input port
@@ -114,6 +101,8 @@ class HitSequenceAdmittance(LeafSystem):
         super().__init__()
 
         self._traj = traj_approach
+        self._traj_duration = traj_approach.end_time()
+        self._t_traj_start = 0.0  # initial approach starts at t = 0
         self._t_hit_start = float(t_hit_start)
         self._hit_duration = float(hit_duration)
 
@@ -149,6 +138,34 @@ class HitSequenceAdmittance(LeafSystem):
             BasicVector(2),
             self.CalcStateOutput,
         )
+        
+    def configure_new_hit(
+        self,
+        t_hit_start,
+        q_prehit,
+        J_pinv,
+        n_hat,
+        F_des,
+        hit_duration,
+        retract_duration,
+        traj_approach,
+    ):
+        """Update internal parameters for a new hit without rebuilding the system."""
+        self._t_hit_start = float(t_hit_start)
+        self._hit_duration = float(hit_duration)
+        self._retract_duration = float(retract_duration)
+        self._q_prehit = q_prehit.copy().reshape(-1)
+        self._J_pinv = J_pinv.copy()
+        self._n_hat = n_hat / np.linalg.norm(n_hat)
+        self._F_des_hit = float(F_des)
+
+        self._traj = traj_approach
+        self._traj_duration = traj_approach.end_time()
+        # The approach should run over [t_traj_start, t_hit_start] in absolute time.
+        # Since we choose t_hit_start = t_traj_start + traj_duration, we get:
+        self._t_traj_start = self._t_hit_start - self._traj_duration
+
+
 
     def DoCalcTimeDerivatives(self, context, derivatives):
         t = context.get_time()
@@ -186,8 +203,15 @@ class HitSequenceAdmittance(LeafSystem):
         s = x[0]
 
         if t < self._t_hit_start:
-            # Phase 1: approach
-            q_cmd = self._traj.value(t).flatten()
+            # Phase 1: approach – follow joint-space trajectory in "local" time
+            t_rel = t - self._t_traj_start
+            # Clamp just in case
+            if t_rel < 0.0:
+                t_rel = 0.0
+            if t_rel > self._traj_duration:
+                t_rel = self._traj_duration
+            q_cmd = self._traj.value(t_rel).flatten()
+
 
         else:
             tau = t - self._t_hit_start
@@ -286,7 +310,12 @@ def compute_n_hat(X_WSoup, X_WH_prehit):
     p_soup_W = X_WSoup.translation()
     p_hammer_prehit_W = X_WH_prehit.translation()
     n = p_soup_W - p_hammer_prehit_W
-    return n / np.linalg.norm(n)
+    norm = np.linalg.norm(n)
+    if norm < 1e-8:
+        # Fallback direction (e.g. world -z) if poses coincide
+        n = np.array([0.0, 0.0, -1.0])
+        norm = np.linalg.norm(n)
+    return n / norm
 
 
 def compute_J_pinv_at_prehit(plant, iiwa_model_instance, hammer_face_frame, q_prehit):
@@ -602,7 +631,7 @@ def run_hit_experiment(
 
 
 def configure_hit_for_target(
-    hit_ctrl,
+    hit_handles: HitAdmittanceHandles,
     plant,
     iiwa_model_instance,
     hammer_face_frame,
@@ -613,6 +642,9 @@ def configure_hit_for_target(
     params: AdmittanceParams,
     t_now: float,
 ):
+    hit_ctrl = hit_handles.hit_ctrl
+    force_sys = hit_handles.force_sys
+
     # Approach traj
     path = [q_current, q_prehit]
     traj = make_joint_space_position_trajectory(path, timestep=params.approach_timestep)
@@ -622,7 +654,8 @@ def configure_hit_for_target(
     n_hat = compute_n_hat(X_WSoup, X_WH_prehit)
     J_pinv = compute_J_pinv_at_prehit(plant, iiwa_model_instance, hammer_face_frame, q_prehit)
 
-    # Configure controller internals
+    # Update BOTH systems to use the new direction
+    force_sys.set_direction(n_hat)
     hit_ctrl.configure_new_hit(
         t_hit_start=t_hit_start,
         q_prehit=q_prehit,
@@ -634,7 +667,14 @@ def configure_hit_for_target(
         traj_approach=traj,
     )
 
+    # Optional: keep handles in sync
+    hit_handles.traj_approach = traj
+    hit_handles.t_hit_start = t_hit_start
+    hit_handles.n_hat = n_hat
+    hit_handles.J_pinv = J_pinv
+
     return traj, t_hit_start, n_hat, J_pinv
+
 
 
 def build_hit_admittance_core(
@@ -647,8 +687,9 @@ def build_hit_admittance_core(
 
     # Dummy initial prehit (same as current)
     q_prehit = q_current.copy()
-    X_WSoup_dummy = plant.EvalBodyPoseInWorld(plant_ctx, plant.world_body()).Clone()
+    X_WSoup_dummy = plant.EvalBodyPoseInWorld(plant_ctx, plant.world_body())
     X_WH_prehit_dummy = X_WSoup_dummy  # dummy; will be overwritten
+
 
     handles = build_hit_admittance_pipeline(
         builder=builder,
@@ -689,7 +730,7 @@ def initialize_whack_system(scenario_yaml, params: AdmittanceParams):
     hammer_face_frame = plant.GetFrameByName("hammer_face", hammer)
 
     # Build and wire the admittance controller (with dummy initial config)
-    from whack_force_admittance import build_hit_admittance_core
+    
     hit_handles = build_hit_admittance_core(
         builder=builder,
         station=station,
