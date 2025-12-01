@@ -1,0 +1,100 @@
+<?xml version="1.6"?>
+<sdf version="1.7">
+  <model name="mole_unit">
+
+    <!-- Socket welded to the board -->
+    <link name="socket">
+      <inertial>
+        <mass>0.5</mass>
+        <inertia>
+          <ixx>1e-4</ixx><iyy>1e-4</iyy><izz>1e-4</izz>
+        </inertia>
+      </inertial>
+
+      <!-- Decorative ring around mole hole -->
+      <visual name="socket_ring">
+        <pose>0 0 0.005 0 0 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>0.07</radius>
+            <length>0.004</length>
+          </cylinder>
+        </geometry>
+        <material>
+          <ambient>0.1 0.1 0.1 1</ambient>
+          <diffuse>0.2 0.2 0.2 1</diffuse>
+        </material>
+      </visual>
+      
+    </link>
+
+    <!-- Moving mole -->
+    <link name="mole">
+      <inertial>
+        <mass>0.2</mass>
+        <inertia>
+          <ixx>1e-4</ixx><iyy>1e-4</iyy><izz>1e-4</izz>
+        </inertia>
+      </inertial>
+
+      <!-- body shifted upward by 5 cm -->
+      <visual name="body">
+        <pose>0 0 0.05 0 0 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>0.05</radius>
+            <length>0.10</length>
+          </cylinder>
+        </geometry>
+        <material>
+          <diffuse>0.7 0.5 0.4 1</diffuse>   <!-- Mole brown -->
+          <ambient>0.4 0.3 0.2 1</ambient>
+        </material>
+      </visual>
+
+      <!-- collision shifted upward same amount -->
+      <collision name="body_collision">
+        <pose>0 0 0.05 0 0 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>0.05</radius>
+            <length>0.10</length>
+          </cylinder>
+        </geometry>
+      </collision>
+
+      <!-- Eyes relative to shifted body -->
+      <visual name="eye_left">
+        <pose>-0.015 0.058 0.07 0 0 0</pose>
+        <geometry><sphere><radius>0.008</radius></sphere></geometry>
+        <material><diffuse>0 0 0 1</diffuse></material>
+      </visual>
+
+      <visual name="eye_right">
+        <pose>0.015 0.058 0.07 0 0 0</pose>
+        <geometry><sphere><radius>0.008</radius></sphere></geometry>
+        <material><diffuse>0 0 0 1</diffuse></material>
+      </visual>
+
+    </link>
+
+    <!-- Prismatic joint (force-actuated via HardwareStation) -->
+    <joint name="mole_slider" type="prismatic">
+      <parent>socket</parent>
+      <child>mole</child>
+      <axis>
+        <xyz>0 0 1</xyz>
+        <limit>
+          <lower>0.0</lower>
+          <upper>0.10</upper>
+          <effort>200</effort>
+        </limit>
+        <dynamics>
+          <damping>5</damping>
+        </dynamics>
+      </axis>
+    </joint>
+
+    <static>false</static>
+  </model>
+</sdf>
