@@ -1,2 +1,4 @@
 --extra-index-url https://drake-packages.csail.mit.edu/whl/nightly
 manipulation==2025.10.20
+
+meshcat==2025.10.20
