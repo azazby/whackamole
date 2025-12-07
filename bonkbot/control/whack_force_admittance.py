@@ -3,15 +3,16 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from dataclasses import dataclass
+from pathlib import Path
 
 from pydrake.systems.framework import LeafSystem, BasicVector, DiagramBuilder
 from pydrake.common.value import AbstractValue
 from pydrake.multibody.plant import ContactResults
 from pydrake.multibody.tree import JacobianWrtVariable  # used later for J_pinv
-from pydrake.systems.primitives import LogVectorOutput  # used later for logging
+from pydrake.systems.primitives import LogVectorOutput, MatrixGain  # logging / slicing
 from pydrake.trajectories import PiecewisePolynomial     # used by trajectory helper
 from pydrake.systems.analysis import Simulator
-from manipulation.scenarios import LoadScenario, MakeHardwareStation
+from manipulation.station import LoadScenario, MakeHardwareStation
 
 
 
@@ -322,7 +323,7 @@ def compute_J_pinv_at_prehit(plant, iiwa_model_instance, hammer_face_frame, q_pr
     """
     Compute the translational velocity Jacobian Jv_WQ at the hammer-face
     origin, at the pre-hit configuration q_prehit, and return its
-    Moore–Penrose pseudoinverse J_pinv (7x3).
+    Moore–Penrose pseudoinverse J_pinv (7x3 for iiwa).
 
       v_WQ = Jv_WQ * v    ⇒   dq ≈ J_pinv * dx_W
     """
@@ -340,6 +341,8 @@ def compute_J_pinv_at_prehit(plant, iiwa_model_instance, hammer_face_frame, q_pr
         plant.world_frame(),  # express in world
     )
 
+    # Keep only the iiwa portion (first len(q_prehit) columns)
+    Jv_WQ = Jv_WQ[:, : len(q_prehit)]
     J_pinv = np.linalg.pinv(Jv_WQ)  # shape (7,3) for iiwa
     return J_pinv
 
@@ -440,10 +443,19 @@ def build_hit_admittance_pipeline(
     )
 
     # Measured joint positions → controller (input 1)
-    builder.Connect(
-        station.get_output_port(3),  # 'iiwa.position_measured'
-        hit_ctrl.get_input_port(1),
-    )
+    meas_port = station.get_output_port(3)  # 'iiwa.position_measured'
+    if meas_port.size() > len(q_prehit):
+        # Slice to the iiwa portion (first len(q_prehit))
+        G = np.zeros((len(q_prehit), meas_port.size()))
+        G[:, : len(q_prehit)] = np.eye(len(q_prehit))
+        gain = builder.AddSystem(MatrixGain(G))
+        builder.Connect(meas_port, gain.get_input_port())
+        builder.Connect(gain.get_output_port(), hit_ctrl.get_input_port(1))
+    else:
+        builder.Connect(
+            meas_port,
+            hit_ctrl.get_input_port(1),
+        )
 
     # Controller output q_cmd → iiwa position command
     builder.Connect(
@@ -491,7 +503,7 @@ def build_hit_admittance_pipeline(
 # Plotting helper
 # ---------------------------------------------------------------------------
 
-def plot_hit_results(hit_handles: HitAdmittanceHandles, plot: bool = True):
+def plot_hit_results(hit_handles: HitAdmittanceHandles, root_context=None, plot: bool = True, save_dir: Path | str | None = None):
     """
     Plot force, admittance state [s, s_dot], and joint positions using
     the loggers stored in hit_handles.
@@ -507,52 +519,84 @@ def plot_hit_results(hit_handles: HitAdmittanceHandles, plot: bool = True):
     adm_logger   = hit_handles.loggers.get("adm", None)
     q_logger     = hit_handles.loggers.get("q", None)
 
+    def _find_log(logger):
+        if logger is None or not hasattr(logger, "FindLog"):
+            return None
+        if root_context is None:
+            return None
+        try:
+            return logger.FindLog(root_context)
+        except Exception:
+            return None
+
+    fig_numbers = []
+
     # --- Plot measured normal force ---
     if force_logger is not None:
-        t_force = force_logger.sample_times()
-        data_F  = force_logger.data()   # shape (1, N) if scalar
-        F_meas  = data_F[0, :]
+        log = _find_log(force_logger) or force_logger
+        if hasattr(log, "sample_times"):
+            t_force = log.sample_times()
+            data_F  = log.data()   # shape (1, N) if scalar
+            F_meas  = data_F[0, :]
 
-        plt.figure()
-        plt.plot(t_force, F_meas)
-        plt.xlabel("t [s]")
-        plt.ylabel("F_meas [N]")
-        plt.title("Measured normal force along n_hat")
+            plt.figure()
+            plt.plot(t_force, F_meas)
+            plt.xlabel("t [s]")
+            plt.ylabel("F_meas [N]")
+            plt.title("Measured normal force along n_hat")
+            fig_numbers.append(plt.gcf().number)
 
     # --- Plot admittance state [s, s_dot] ---
     if adm_logger is not None:
-        t_adm = adm_logger.sample_times()
-        adm   = adm_logger.data()       # shape (2, N)
-        s     = adm[0, :]
-        s_dot = adm[1, :]
+        log = _find_log(adm_logger) or adm_logger
+        if hasattr(log, "sample_times"):
+            t_adm = log.sample_times()
+            adm   = log.data()       # shape (2, N)
+            s     = adm[0, :]
+            s_dot = adm[1, :]
 
-        plt.figure()
-        plt.plot(t_adm, s)
-        plt.xlabel("t [s]")
-        plt.ylabel("s [m]")
-        plt.title("Admittance displacement along n_hat")
+            plt.figure()
+            plt.plot(t_adm, s)
+            plt.xlabel("t [s]")
+            plt.ylabel("s [m]")
+            plt.title("Admittance displacement along n_hat")
+            fig_numbers.append(plt.gcf().number)
 
-        plt.figure()
-        plt.plot(t_adm, s_dot)
-        plt.xlabel("t [s]")
-        plt.ylabel("s_dot [m/s]")
-        plt.title("Admittance velocity along n_hat")
+            plt.figure()
+            plt.plot(t_adm, s_dot)
+            plt.xlabel("t [s]")
+            plt.ylabel("s_dot [m/s]")
+            plt.title("Admittance velocity along n_hat")
+            fig_numbers.append(plt.gcf().number)
 
     # --- Plot joint positions ---
     if q_logger is not None:
-        t_q = q_logger.sample_times()
-        Q   = q_logger.data()           # shape (nq, N)
+        log = _find_log(q_logger) or q_logger
+        if hasattr(log, "sample_times"):
+            t_q = log.sample_times()
+            Q   = log.data()           # shape (nq, N)
 
-        plt.figure()
-        for i in range(Q.shape[0]):
-            plt.plot(t_q, Q[i, :], label=f"q{i+1}")
-        plt.xlabel("t [s]")
-        plt.ylabel("joint angle [rad]")
-        plt.title("iiwa joint positions (measured)")
-        plt.legend()
+            plt.figure()
+            for i in range(Q.shape[0]):
+                plt.plot(t_q, Q[i, :], label=f"q{i+1}")
+            plt.xlabel("t [s]")
+            plt.ylabel("joint angle [rad]")
+            plt.title("iiwa joint positions (measured)")
+            plt.legend()
+            fig_numbers.append(plt.gcf().number)
 
-    # Optional: show all figures
-    plt.show()
+    # Optional: show or save all figures
+    backend = plt.get_backend().lower()
+    if save_dir is not None:
+        save_dir = Path(save_dir)
+        save_dir.mkdir(parents=True, exist_ok=True)
+        for idx, num in enumerate(fig_numbers):
+            fig = plt.figure(num)
+            fig.savefig(save_dir / f"hit_plot_{idx}.png", bbox_inches="tight")
+    if not backend.endswith("agg"):
+        plt.show()
+    else:
+        plt.close("all")
 
 # ---------------------------------------------------------------------------
 # One-shot convenience: build, run, (optionally) plot
