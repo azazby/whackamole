@@ -659,7 +659,11 @@ def capture_multi_camera_pointcloud(
             pc_port = pc_system.get_output_port()
             pc_ctx = pc_system.GetMyContextFromRoot(root_context)
             pc = pc_port.Eval(pc_ctx)
-            P_W = pc.xyzs().T  # (N,3)
+            P_W_raw = pc.xyzs().T  # (N,3)
+            # DepthImageToPointCloud keeps pixels with +inf depth for "sky".
+            # Filter non-finite rows so downstream stats (z-range) stay sane.
+            finite_mask = np.isfinite(P_W_raw).all(axis=1)
+            P_W = P_W_raw[finite_mask]
             all_points_W.append(P_W)
             measurements.append(
                 CameraMeasurement(
