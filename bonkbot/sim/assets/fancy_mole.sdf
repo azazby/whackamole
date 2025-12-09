@@ -1,0 +1,210 @@
+<?xml version="1.6"?>
+<sdf xmlns:drake="http://drake.mit.edu" version="1.7">
+  <model name="mole_unit">
+
+    <!-- Socket welded to the board -->
+    <link name="socket">
+      <inertial>
+        <mass>0.5</mass>
+        <inertia>
+          <ixx>1e-4</ixx><iyy>1e-4</iyy><izz>1e-4</izz>
+        </inertia>
+      </inertial>
+
+      <!-- Decorative ring around mole hole -->
+      <visual name="socket_ring">
+        <pose>0 0 0.005 0 0 0</pose>
+        <geometry>
+          <cylinder>
+            <radius>0.07</radius>
+            <length>0.004</length>
+          </cylinder>
+        </geometry>
+        <material>
+          <ambient>0.1 0.1 0.1 1</ambient>
+          <diffuse>0.2 0.2 0.2 1</diffuse>
+        </material>
+      </visual>
+      
+    </link>
+
+    <!-- Moving mole -->
+    <link name="mole">
+        <inertial>
+            <mass>0.2</mass>
+            <inertia>
+            <ixx>1e-4</ixx><iyy>1e-4</iyy><izz>1e-4</izz>
+            </inertia>
+        </inertial>
+
+        <!-- Cylinder piece mole body -->
+        <visual name="body">
+            <pose>0 0 -0.045 0 0 0</pose>  <!-- top at z = 0.03, bottom at z = -0.17 -->
+            <geometry>
+            <cylinder>
+                <radius>0.05</radius>
+                <length>0.2</length>
+            </cylinder>
+            </geometry>
+            <material>
+                <diffuse>0.70 0.48 0.27 1</diffuse>
+                <ambient>0.28 0.17 0.08 1</ambient>
+                <specular>0.05 0.05 0.05 1</specular>
+            </material>
+        </visual>
+
+        <!-- Rounded cap on top of the body (visual-only hemisphere) -->
+        <visual name="head_cap">
+            <!-- Centered at the top of the cylinder: center at z = 0.03; top at 0.08 -->
+            <pose>0 0 0.055 0 0 0</pose>
+            <geometry>
+            <sphere>
+                <radius>0.05</radius>
+            </sphere>
+            </geometry>
+            <material>
+                <diffuse>0.70 0.48 0.27 1</diffuse>
+                <ambient>0.28 0.17 0.08 1</ambient>
+                <specular>0.05 0.05 0.05 1</specular>
+            </material>
+        </visual>
+
+        <!-- Collision: just a cylinder -->
+        <collision name="body_collision">
+            <pose>0 0 0.055 0 0 0</pose>
+            <geometry>
+            <cylinder>
+                <radius>0.05</radius>
+                <length>0.10</length>
+            </cylinder>
+            </geometry>
+        </collision>
+
+        <!-- Eyes on rounded top -->
+        <visual name="eye_left">
+            <!-- x = left/right, y = "forward", z = up -->
+            <pose>-0.024 0.045 0.06 0 0 0</pose>
+            <geometry>
+            <sphere>
+                <radius>0.0075</radius>
+            </sphere>
+            </geometry>
+            <material>
+            <diffuse>0 0 0 1</diffuse>
+            <ambient>0 0 0 1</ambient>
+            </material>
+        </visual>
+
+        <visual name="eye_right">
+            <pose>0.024 0.045 0.06 0 0 0</pose>
+            <geometry>
+            <sphere>
+                <radius>0.0075</radius>
+            </sphere>
+            </geometry>
+            <material>
+            <diffuse>0 0 0 1</diffuse>
+            <ambient>0 0 0 1</ambient>
+            </material>
+        </visual>
+
+        <!-- Left cheek blush -->
+        <visual name="blush_left">
+            <!-- x: left/right, y: forward, z: up -->
+            <pose>-0.0275 0.04 0.045 0 0 0</pose>
+            <geometry>
+            <drake:ellipsoid>
+                <!-- half-axes (meters): a=x, b=y, c=z -->
+                <a>0.008</a>   <!-- width -->
+                <b>0.007</b>   <!-- height -->
+                <c>0.004</c>   <!-- very thin (almost a decal) -->
+            </drake:ellipsoid>
+            </geometry>
+            <material>
+                <ambient>0.7 0.5 0.6 1</ambient>
+                <diffuse>1.0 0.7 0.8 1</diffuse>   <!-- light pink -->
+                <specular>0.03 0.03 0.03 1</specular> <!-- matte-ish -->
+            </material>
+        </visual>
+
+        <!-- Right cheek blush -->
+        <visual name="blush_right">
+            <pose>0.0275 0.04 0.045 0 0 0</pose>
+            <geometry>
+            <drake:ellipsoid>
+                <a>0.008</a>
+                <b>0.007</b>
+                <c>0.004</c>
+            </drake:ellipsoid>
+            </geometry>
+            <material>
+                <ambient>0.7 0.5 0.6 1</ambient>
+                <diffuse>1.0 0.7 0.8 1</diffuse>
+                <specular>0.03 0.03 0.03 1</specular>
+            </material>
+        </visual>
+
+        <!-- Little brown nose, slightly in front and below eyes -->
+        <visual name="nose">
+            <pose>0 0.052 0.055 0 0 0</pose>
+            <geometry>
+            <sphere>
+                <radius>0.008</radius>
+            </sphere>
+            </geometry>
+            <material>
+                <diffuse>0.5 0.3 0.2 1</diffuse>
+                <ambient>0.3 0.2 0.15 1</ambient>
+            </material>
+        </visual>
+
+        <!-- Buck teeth: two thin white rectangles just under the nose -->
+        <visual name="tooth_left">
+            <!-- Slightly left, slightly forward, below nose -->
+            <pose>-0.005 0.052 0.036 0 0 0</pose>
+            <geometry>
+            <box>
+                <!-- size: x (width), y (thickness), z (height) -->
+                <size>0.0085 0.003 0.0115</size>
+            </box>
+            </geometry>
+            <material>
+            <diffuse>1 1 1 1</diffuse>
+            <ambient>0.8 0.8 0.8 1</ambient>
+            </material>
+        </visual>
+
+        <visual name="tooth_right">
+            <pose>0.005 0.052 0.036 0 0 0</pose>
+            <geometry>
+            <box>
+                <size>0.0085 0.003 0.0115</size>
+            </box>
+            </geometry>
+            <material>
+            <diffuse>1 1 1 1</diffuse>
+            <ambient>0.8 0.8 0.8 1</ambient>
+            </material>
+        </visual>
+    </link>
+
+    <!-- Prismatic joint (force-actuated via HardwareStation) -->
+    <joint name="mole_slider" type="prismatic">
+      <parent>socket</parent>
+      <child>mole</child>
+      <axis>
+        <xyz>0 0 1</xyz>
+        <limit>
+          <lower>0.0</lower>
+          <upper>0.2</upper>
+          <effort>200</effort>
+        </limit>
+        <dynamics>
+          <damping>5</damping>
+        </dynamics>
+      </axis>
+    </joint>
+
+    <static>false</static>
+  </model>
+</sdf>

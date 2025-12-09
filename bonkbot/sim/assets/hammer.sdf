@@ -4,79 +4,75 @@
     <static>false</static>
 
     <link name="hammer_link">
-      <!-- Rough inertial properties (good enough for simulation) -->
-      <inertial>
-        <mass>1.0</mass>
-        <inertia>
-          <ixx>0.01</ixx>
-          <iyy>0.01</iyy>
-          <izz>0.01</izz>
-          <ixy>0.0</ixy>
-          <ixz>0.0</ixz>
-          <iyz>0.0</iyz>
-        </inertia>
-      </inertial>
+        <!-- Rough inertial properties (good enough for simulation) -->
+        <inertial>
+            <mass>1.0</mass>
+            <inertia>
+                <ixx>0.01</ixx>
+                <iyy>0.01</iyy>
+                <izz>0.01</izz>
+                <ixy>0.0</ixy>
+                <ixz>0.0</ixz>
+                <iyz>0.0</iyz>
+            </inertia>
+        </inertial>
 
-      <!-- Handle: long thin cylinder, centered along +z -->
-      <visual name="handle_visual">
-        <!-- x y z roll pitch yaw -->
-        <pose>0 0 0.15 0 0 0</pose>
-        <geometry>
-          <cylinder>
-            <radius>0.015</radius>
-            <length>0.35</length>
-          </cylinder>
-        </geometry>
-        <material>
-          <ambient>0.75 0.55 0.3 1</ambient>
-          <diffuse>0.75 0.55 0.3 1</diffuse>
-        </material>
-      </visual>
+        <!-- Handle: long thin cylinder, centered along +z -->
+        <visual name="handle_visual">
+            <pose>0 0 0.125 0 0 0</pose>
+            <geometry>
+            <cylinder>
+                <radius>0.015</radius>
+                <length>0.25</length>
+            </cylinder>
+            </geometry>
+            <material>
+            <ambient>0.75 0.55 0.3 1</ambient>
+            <diffuse>0.75 0.55 0.3 1</diffuse>
+            </material>
+        </visual>
 
-      <collision name="handle_collision">
-        <pose>0 0 0.15 0 0 0</pose>
-        <geometry>
-          <cylinder>
-            <radius>0.015</radius>
-            <length>0.35</length>
-          </cylinder>
-        </geometry>
-      </collision>
+        <collision name="handle_collision">
+            <pose>0 0 0.125 0 0 0</pose>
+            <geometry>
+            <cylinder>
+                <radius>0.01</radius>
+                <length>0.25</length>
+            </cylinder>
+            </geometry>
+        </collision>
 
-      <!-- Head: short, fat cylinder at the top of the handle -->
-      <visual name="head_visual">
-        <pose>0 0 0.3 0 1.5708 0</pose>
-        <geometry>
-          <cylinder>
-            <radius>0.06</radius>
-            <length>0.15</length>
-          </cylinder>
-        </geometry>
-        <material>
-          <ambient>0.75 0.55 0.3 1</ambient>
-          <diffuse>0.75 0.55 0.3 1</diffuse>
-        </material>
-      </visual>
+        <!-- Head: short, fat cylinder at the top of the handle -->
+        <visual name="head_visual">
+            <pose>0 0 0.25 0 1.5708 0</pose>
+            <geometry>
+            <cylinder>
+                <radius>0.05</radius>
+                <length>0.12</length>
+            </cylinder>
+            </geometry>
+            <material>
+            <ambient>0.75 0.55 0.3 1</ambient>
+            <diffuse>0.75 0.55 0.3 1</diffuse>
+            </material>
+        </visual>
 
-      <collision name="head_collision">
-        <pose>0 0 0.3 0 1.5708 0</pose>
-        <geometry>
-          <cylinder>
-            <radius>0.06</radius>
-            <length>0.15</length>
-          </cylinder>
-        </geometry>
-      </collision>
-
+        <collision name="head_collision">
+            <pose>0 0 0.25 0 1.5708 0</pose>
+            <geometry>
+            <cylinder>
+                <radius>0.05</radius>
+                <length>0.12</length>
+            </cylinder>
+            </geometry>
+        </collision>
     </link>
-
     <!-- frame for hammer head (center of head) -->
     <frame name="hammer_head" attached_to="hammer_link">
-        <pose>0 0 0.3 0 1.5708 0</pose>
+        <pose>0 0 0.25 0 1.5708 0</pose>
     </frame>
     <frame name="hammer_face" attached_to="hammer_link">
-        <pose>0.075 0 0.3 0 1.5708 0</pose>
+        <pose>0.06 0 0.25 0 1.5708 0</pose>
     </frame>
-    
   </model>
 </sdf>

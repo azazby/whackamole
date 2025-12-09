@@ -1,0 +1,68 @@
+<?xml version="1.6"?>
+<sdf version="1.7">
+  <model name="grid_board">
+
+    <!-- 
+      Single-link board + tabletop + cabinet.
+      No internal joints → no possible loops.
+    -->
+    <link name="board">
+
+      <inertial>
+        <mass>8.0</mass>
+        <inertia>
+          <ixx>0.03</ixx><iyy>0.03</iyy><izz>0.03</izz>
+          <ixy>0</ixy><ixz>0</ixz><iyz>0</iyz>
+        </inertia>
+      </inertial>
+
+      <!-- Top plate (where holes and moles sit) -->
+      <collision name="top_collision">
+        <geometry>
+          <box>
+            <size>0.8 0.8 0.025</size>
+          </box>
+        </geometry>
+      </collision>
+
+      <visual name="top_visual">
+        <geometry>
+          <box>
+            <size>0.8 0.8 0.025</size>
+          </box>
+        </geometry>
+        <material>
+          <ambient>0.1 0.4 0.1 1</ambient>   <!-- darker green -->
+          <diffuse>0.2 0.7 0.2 1</diffuse>   <!-- bright green -->
+        </material>
+      </visual>
+
+      <!-- Cabinet body beneath the tabletop -->
+      <collision name="cabinet_collision">
+        <geometry>
+          <box>
+            <size>0.6 0.6 0.45</size>
+          </box>
+        </geometry>
+        <!-- Offset cabinet downward so its top meets the tabletop -->
+        <pose>0 0 -0.2375 0 0 0</pose>
+      </collision>
+
+      <visual name="cabinet_visual">
+        <geometry>
+          <box>
+            <size>0.6 0.6 0.45</size>
+          </box>
+        </geometry>
+        <material>
+          <ambient>0.6 0.6 0.65 1</ambient>
+          <diffuse>0.75 0.75 0.8 1</diffuse>
+        </material>
+        <pose>0 0 -0.2375 0 0 0</pose>
+      </visual>
+
+    </link>
+
+    <static>false</static>
+  </model>
+</sdf>
